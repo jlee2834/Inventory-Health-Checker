@@ -721,7 +721,7 @@ function ConvertTo-PrettyHtmlReport {
     </div>
 
     <div class="footer">
-        Buttons export the currently visible filtered data. Click any device row to open the side panel for a cleaner view.
+        Buttons export the currently visible filtered data. Click any device row to open the side panel for a cleaner view. Created by jlee2834 (https://github.com/jlee2834)
     </div>
 </div>
 
