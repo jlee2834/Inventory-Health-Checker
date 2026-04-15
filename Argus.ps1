@@ -888,37 +888,37 @@ function renderTable(data) {
     body.innerHTML = data.map(item => {
         const selectedClass = selectedDevice && selectedDevice.ComputerName === item.ComputerName ? 'selected-row' : '';
         return `
-        <tr class="clickable-row `${selectedClass}`" onclick="openSidePanelByName('`${esc(item.ComputerName).replace(/'/g, '&#39;')}`')">
-            <td>`${esc(item.ComputerName)}`</td>
-            <td><span class="`${statusClass(item.HealthStatus)}`">`${esc(item.HealthStatus)}`</span></td>
-            <td>`${esc(item.HealthIssues)}`</td>
-            <td>`${esc(item.Reachable)}`</td>
-            <td>`${esc(item.CimSession)}`</td>
-            <td>`${esc(item.LoggedOnUser)}`</td>
-            <td>`${esc(item.OS)}`</td>
-            <td>`${esc(item.Version)}`</td>
-            <td>`${esc(item.BuildNumber)}`</td>
-            <td>`${esc(item.Uptime)}`</td>
-            <td>`${esc(item.CPU)}`</td>
-            <td>`${esc(item.RAMGB)}`</td>
-            <td>`${esc(item.DiskC_TotalGB)}`</td>
-            <td>`${esc(item.DiskC_FreeGB)}`</td>
-            <td>`${esc(item.DiskC_FreePercent)}`</td>
-            <td>`${esc(item.IPv4)}`</td>
-            <td>`${esc(item.Antivirus)}`</td>
-            <td>`${esc(item.DefenderRealtime)}`</td>
-            <td>`${esc(item.LastHotfixId)}`</td>
-            <td>`${esc(item.LastHotfixDate)}`</td>
-            <td>`${esc(item.PendingRebootSignals)}`</td>
-            <td>`${esc(item.InstalledSoftwareCount)}`</td>
-            <td>`${esc(item.RdpOpen)}`</td>
-            <td>`${esc(item.WinRMOpen)}`</td>
-            <td>`${esc(item.Manufacturer)}`</td>
-            <td>`${esc(item.Model)}`</td>
-            <td>`${esc(item.SerialNumber)}`</td>
-            <td>`${esc(item.Error)}`</td>
-        </tr>
-    `}).join('');
+        <tr class="clickable-row ${selectedClass}" onclick="openSidePanelByName('${esc(item.ComputerName).replace(/'/g, '&#39;')}')">
+            <td>${esc(item.ComputerName)}</td>
+            <td><span class="${statusClass(item.HealthStatus)}">${esc(item.HealthStatus)}</span></td>
+            <td>${esc(item.HealthIssues)}</td>
+            <td>${esc(item.Reachable)}</td>
+            <td>${esc(item.CimSession)}</td>
+            <td>${esc(item.LoggedOnUser)}</td>
+            <td>${esc(item.OS)}</td>
+            <td>${esc(item.Version)}</td>
+            <td>${esc(item.BuildNumber)}</td>
+            <td>${esc(item.Uptime)}</td>
+            <td>${esc(item.CPU)}</td>
+            <td>${esc(item.RAMGB)}</td>
+            <td>${esc(item.DiskC_TotalGB)}</td>
+            <td>${esc(item.DiskC_FreeGB)}</td>
+            <td>${esc(item.DiskC_FreePercent)}</td>
+            <td>${esc(item.IPv4)}</td>
+            <td>${esc(item.Antivirus)}</td>
+            <td>${esc(item.DefenderRealtime)}</td>
+            <td>${esc(item.LastHotfixId)}</td>
+            <td>${esc(item.LastHotfixDate)}</td>
+            <td>${esc(item.PendingRebootSignals)}</td>
+            <td>${esc(item.InstalledSoftwareCount)}</td>
+            <td>${esc(item.RdpOpen)}</td>
+            <td>${esc(item.WinRMOpen)}</td>
+            <td>${esc(item.Manufacturer)}</td>
+            <td>${esc(item.Model)}</td>
+            <td>${esc(item.SerialNumber)}</td>
+            <td>${esc(item.Error)}</td>
+        </tr>`;
+    }).join('');
 }
 
 function applyFilters() {
@@ -979,24 +979,24 @@ function closeSidePanel() {
 }
 
 function detailCard(title, value, full = false) {
-    return `<div class="detail-card `${full ? 'full' : ''}`"><div class="detail-label">`${esc(title)}`</div><div class="detail-value">`${esc(value ?? '')}`</div></div>`;
+    return `<div class="detail-card ${full ? 'full' : ''}"><div class="detail-label">${esc(title)}</div><div class="detail-value">${esc(value ?? '')}</div></div>`;
 }
 
 function kvRow(label, value) {
-    return `<div class="k">`${esc(label)}`</div><div class="v">`${esc(value ?? '')}`</div>`;
+    return `<div class="k">${esc(label)}</div><div class="v">${esc(value ?? '')}</div>`;
 }
 
 function sectionCard(cssClass, title, subtitle, innerHtml) {
     return `
-        <section class="section-card `${cssClass}`">
+        <section class="section-card ${cssClass}">
             <div class="section-header">
                 <div>
-                    <div class="section-title">`${esc(title)}`</div>
-                    <div class="section-subtitle">`${esc(subtitle)}`</div>
+                    <div class="section-title">${esc(title)}</div>
+                    <div class="section-subtitle">${esc(subtitle)}</div>
                 </div>
             </div>
             <div class="section-content">
-                `${innerHtml}`
+                ${innerHtml}
             </div>
         </section>
     `;
@@ -1010,9 +1010,9 @@ function getHealthSectionClass(status) {
 
 function renderSidePanel(device) {
     document.getElementById('panelComputerName').textContent = device.ComputerName || 'Device Details';
-    document.getElementById('panelSubtext').textContent = `${device.OS || 'Unknown OS'} • `${device.IPv4 || 'No IP found'}`;
+document.getElementById('panelSubtext').textContent = `${device.OS || 'Unknown OS'} • ${device.IPv4 || 'No IP found'}`;
 
-    const healthBadge = `<span class="`${statusClass(device.HealthStatus)}`">`${esc(device.HealthStatus)}`</span>`;
+    const healthBadge = `<span class="${statusClass(device.HealthStatus)}">${esc(device.HealthStatus)}</span>`;
     const healthClass = getHealthSectionClass(device.HealthStatus);
 
     const overviewSection = sectionCard(
