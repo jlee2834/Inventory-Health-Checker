@@ -1,5 +1,6 @@
 @echo off
 title Argus - Endpoint Visibility Tool
+color 0B
 
 echo.
 echo ==============================
@@ -11,4 +12,6 @@ echo.
 cd /d "%~dp0"
 pwsh.exe -ExecutionPolicy Bypass -File ".\Argus.ps1" -ExportHtml -OpenReport
 
+echo.
+echo Scan complete.
 pause
