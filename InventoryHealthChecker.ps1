@@ -1254,11 +1254,11 @@ if ($ExportHtml) {
     $excelName  = "inventory_$stamp.xls"
 
     $html = ConvertTo-PrettyHtmlReport `
-        -Data $results `
-        -Title 'IT Help Desk Inventory Dashboard' `
-        -CsvFileName $csvName `
-        -JsonFileName $jsonName `
-        -ExcelFileName $excelName
+    -Data $results `
+    -Title 'Inventory Checker' `
+    -CsvFileName $csvName `
+    -JsonFileName $jsonName `
+    -ExcelFileName $excelName
 
     Set-Content -Path $htmlPath -Value $html -Encoding UTF8
 }
