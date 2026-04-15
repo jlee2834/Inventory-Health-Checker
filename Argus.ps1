@@ -364,10 +364,10 @@ function ConvertTo-PrettyHtmlReport {
     $json        = $Data | ConvertTo-Json -Depth 6 -Compress
     $jsonEscaped = $json.Replace('</script>', '<\/script>')
     $generated   = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
-    $total       = $Data.Count
-    $healthy     = ($Data | Where-Object { $_.HealthStatus -eq 'Healthy' }).Count
-    $warning     = ($Data | Where-Object { $_.HealthStatus -eq 'Warning' }).Count
-    $attention   = ($Data | Where-Object { $_.HealthStatus -eq 'Needs Attention' }).Count
+    $total       = @($Data).Count
+    $healthy     = @($Data | Where-Object { $_.HealthStatus -eq 'Healthy' }).Count
+    $warning     = @($Data | Where-Object { $_.HealthStatus -eq 'Warning' }).Count
+    $attention   = @($Data | Where-Object { $_.HealthStatus -eq 'Needs Attention' }).Count
 
     # FIX #1: Removed the broken/stray return @'...'@ block; single clean here-string below
     return @"
