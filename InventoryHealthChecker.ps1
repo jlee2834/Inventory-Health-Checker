@@ -82,7 +82,7 @@ function Get-HealthStatus {
         [double]$DiskFreePercent,
         [int]$PendingRebootSignals,
         [bool]$DefenderRealtime,
-        [Nullable[datetime]]$LastHotfixDate,
+        [object]$LastHotfixDate,
         [bool]$HasError
     )
 
@@ -107,8 +107,9 @@ function Get-HealthStatus {
         $issues.Add('Defender real-time protection off or unavailable')
     }
 
-    if ($LastHotfixDate.HasValue) {
-        $daysSincePatch = ((Get-Date) - $LastHotfixDate.Value).Days
+    # FIX #4: Use $null check instead of .HasValue for broader compatibility
+    if ($null -ne $LastHotfixDate) {
+        $daysSincePatch = ((Get-Date) - [datetime]$LastHotfixDate).Days
         if ($daysSincePatch -gt 45) {
             $issues.Add('Patch age over 45 days')
         }
@@ -240,35 +241,35 @@ function Get-RemoteInventory {
 
     try {
         $result.Reachable = Test-Connection -ComputerName $Computer -Count 1 -Quiet -ErrorAction SilentlyContinue
-        $result.RdpOpen = Test-TcpPort -Computer $Computer -Port 3389
+        $result.RdpOpen   = Test-TcpPort -Computer $Computer -Port 3389
         $result.WinRMOpen = Test-TcpPort -Computer $Computer -Port 5985
 
         $session = New-CimSession -ComputerName $Computer -ErrorAction Stop
         $result.CimSession = $true
 
-        $os = Get-CimInstance -CimSession $session -ClassName Win32_OperatingSystem
-        $cs = Get-CimInstance -CimSession $session -ClassName Win32_ComputerSystem
+        $os   = Get-CimInstance -CimSession $session -ClassName Win32_OperatingSystem
+        $cs   = Get-CimInstance -CimSession $session -ClassName Win32_ComputerSystem
         $bios = Get-CimInstance -CimSession $session -ClassName Win32_BIOS
-        $cpu = Get-CimInstance -CimSession $session -ClassName Win32_Processor | Select-Object -First 1
+        $cpu  = Get-CimInstance -CimSession $session -ClassName Win32_Processor | Select-Object -First 1
         $disk = Get-CimInstance -CimSession $session -ClassName Win32_LogicalDisk -Filter "DeviceID='C:'"
-        $nic = Get-CimInstance -CimSession $session -ClassName Win32_NetworkAdapterConfiguration -Filter 'IPEnabled = True'
+        $nic  = Get-CimInstance -CimSession $session -ClassName Win32_NetworkAdapterConfiguration -Filter 'IPEnabled = True'
 
-        $result.OS = $os.Caption
-        $result.Version = $os.Version
-        $result.BuildNumber = $os.BuildNumber
+        $result.OS           = $os.Caption
+        $result.Version      = $os.Version
+        $result.BuildNumber  = $os.BuildNumber
         $result.Architecture = $os.OSArchitecture
-        $result.LastBoot = $os.LastBootUpTime
-        $result.Uptime = Get-LastBootReadable -LastBoot $os.LastBootUpTime
+        $result.LastBoot     = $os.LastBootUpTime
+        $result.Uptime       = Get-LastBootReadable -LastBoot $os.LastBootUpTime
         $result.LoggedOnUser = $cs.UserName
         $result.SerialNumber = $bios.SerialNumber
         $result.Manufacturer = $cs.Manufacturer
-        $result.Model = $cs.Model
-        $result.CPU = $cpu.Name
-        $result.RAMGB = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
+        $result.Model        = $cs.Model
+        $result.CPU          = $cpu.Name
+        $result.RAMGB        = [math]::Round($cs.TotalPhysicalMemory / 1GB, 2)
 
         if ($disk) {
-            $result.DiskC_TotalGB = [math]::Round($disk.Size / 1GB, 2)
-            $result.DiskC_FreeGB = [math]::Round($disk.FreeSpace / 1GB, 2)
+            $result.DiskC_TotalGB     = [math]::Round($disk.Size / 1GB, 2)
+            $result.DiskC_FreeGB      = [math]::Round($disk.FreeSpace / 1GB, 2)
             $result.DiskC_FreePercent = if ($disk.Size -gt 0) { [math]::Round(($disk.FreeSpace / $disk.Size) * 100, 2) } else { 0 }
         }
 
@@ -282,23 +283,29 @@ function Get-RemoteInventory {
         }
         $result.IPv4 = ($ipv4List | Sort-Object -Unique) -join ', '
 
-        try {
-            $defender = Invoke-Command -ComputerName $Computer -ScriptBlock {
-                if (Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue) {
-                    Get-MpComputerStatus | Select-Object AMProductVersion, AntivirusEnabled, RealTimeProtectionEnabled
-                }
-            } -ErrorAction Stop
+        # FIX #6: Guard Invoke-Command with WinRM availability check
+        if ($result.WinRMOpen) {
+            try {
+                $defender = Invoke-Command -ComputerName $Computer -ScriptBlock {
+                    if (Get-Command Get-MpComputerStatus -ErrorAction SilentlyContinue) {
+                        Get-MpComputerStatus | Select-Object AMProductVersion, AntivirusEnabled, RealTimeProtectionEnabled
+                    }
+                } -ErrorAction Stop
 
-            if ($defender) {
-                $result.Antivirus = "Microsoft Defender $($defender.AMProductVersion)"
-                $result.DefenderRealtime = [bool]$defender.RealTimeProtectionEnabled
+                if ($defender) {
+                    $result.Antivirus        = "Microsoft Defender $($defender.AMProductVersion)"
+                    $result.DefenderRealtime = [bool]$defender.RealTimeProtectionEnabled
+                }
+                else {
+                    $result.Antivirus = 'Unknown or unavailable'
+                }
             }
-            else {
+            catch {
                 $result.Antivirus = 'Unknown or unavailable'
             }
         }
-        catch {
-            $result.Antivirus = 'Unknown or unavailable'
+        else {
+            $result.Antivirus = 'WinRM unavailable'
         }
 
         if (-not $SkipHotfixes) {
@@ -308,7 +315,7 @@ function Get-RemoteInventory {
                     Select-Object -First 1
 
                 if ($hotfix) {
-                    $result.LastHotfixId = $hotfix.HotFixID
+                    $result.LastHotfixId   = $hotfix.HotFixID
                     $result.LastHotfixDate = $hotfix.InstalledOn
                 }
             }
@@ -317,7 +324,7 @@ function Get-RemoteInventory {
             }
         }
 
-        $result.PendingRebootSignals = Get-PendingRebootSignals -Computer $Computer
+        $result.PendingRebootSignals   = Get-PendingRebootSignals -Computer $Computer
         $result.InstalledSoftwareCount = Get-InstalledSoftwareCount -Computer $Computer
     }
     catch {
@@ -329,8 +336,11 @@ function Get-RemoteInventory {
         }
     }
 
+    # FIX #2: Replaced ?? operator with PS 5.1-compatible if/else
+    $diskFreePercent = if ($null -ne $result.DiskC_FreePercent) { [double]$result.DiskC_FreePercent } else { 0.0 }
+
     $health = Get-HealthStatus `
-        -DiskFreePercent ([double]($result.DiskC_FreePercent ?? 0)) `
+        -DiskFreePercent $diskFreePercent `
         -PendingRebootSignals ([int]$result.PendingRebootSignals) `
         -DefenderRealtime ([bool]$result.DefenderRealtime) `
         -LastHotfixDate $result.LastHotfixDate `
@@ -351,14 +361,15 @@ function ConvertTo-PrettyHtmlReport {
         [Parameter(Mandatory)][string]$ExcelFileName
     )
 
-    $json = $Data | ConvertTo-Json -Depth 6 -Compress
+    $json        = $Data | ConvertTo-Json -Depth 6 -Compress
     $jsonEscaped = $json.Replace('</script>', '<\/script>')
-    $generated = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
-    $total = $Data.Count
-    $healthy = ($Data | Where-Object { $_.HealthStatus -eq 'Healthy' }).Count
-    $warning = ($Data | Where-Object { $_.HealthStatus -eq 'Warning' }).Count
-    $attention = ($Data | Where-Object { $_.HealthStatus -eq 'Needs Attention' }).Count
+    $generated   = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+    $total       = $Data.Count
+    $healthy     = ($Data | Where-Object { $_.HealthStatus -eq 'Healthy' }).Count
+    $warning     = ($Data | Where-Object { $_.HealthStatus -eq 'Warning' }).Count
+    $attention   = ($Data | Where-Object { $_.HealthStatus -eq 'Needs Attention' }).Count
 
+    # FIX #1: Removed the broken/stray return @'...'@ block; single clean here-string below
     return @"
 <!DOCTYPE html>
 <html lang="en">
@@ -505,6 +516,26 @@ function ConvertTo-PrettyHtmlReport {
     }
     .clickable-row {
         cursor: pointer;
+    }
+    /* FIX #3: Added missing pill CSS classes used by statusClass() in JS */
+    .pill {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .pill.healthy {
+        background: rgba(34, 197, 94, 0.18);
+        color: var(--green);
+    }
+    .pill.warning {
+        background: rgba(245, 158, 11, 0.18);
+        color: var(--yellow);
+    }
+    .pill.attention {
+        background: rgba(239, 68, 68, 0.18);
+        color: var(--red);
     }
     .panel-overlay {
         position: fixed;
@@ -796,7 +827,7 @@ function ConvertTo-PrettyHtmlReport {
             <h2 id="panelComputerName">Device Details</h2>
             <p id="panelSubtext">Select a row to view full device information.</p>
         </div>
-        <button class="panel-close" onclick="closeSidePanel()">✕</button>
+        <button class="panel-close" onclick="closeSidePanel()">&#x2715;</button>
     </div>
     <div class="panel-body">
         <div class="panel-actions">
@@ -857,35 +888,35 @@ function renderTable(data) {
     body.innerHTML = data.map(item => {
         const selectedClass = selectedDevice && selectedDevice.ComputerName === item.ComputerName ? 'selected-row' : '';
         return `
-        <tr class="clickable-row ${selectedClass}" onclick="openSidePanelByName('${esc(item.ComputerName).replace(/'/g, '&#39;')}')">
-            <td>${esc(item.ComputerName)}</td>
-            <td><span class="${statusClass(item.HealthStatus)}">${esc(item.HealthStatus)}</span></td>
-            <td>${esc(item.HealthIssues)}</td>
-            <td>${esc(item.Reachable)}</td>
-            <td>${esc(item.CimSession)}</td>
-            <td>${esc(item.LoggedOnUser)}</td>
-            <td>${esc(item.OS)}</td>
-            <td>${esc(item.Version)}</td>
-            <td>${esc(item.BuildNumber)}</td>
-            <td>${esc(item.Uptime)}</td>
-            <td>${esc(item.CPU)}</td>
-            <td>${esc(item.RAMGB)}</td>
-            <td>${esc(item.DiskC_TotalGB)}</td>
-            <td>${esc(item.DiskC_FreeGB)}</td>
-            <td>${esc(item.DiskC_FreePercent)}</td>
-            <td>${esc(item.IPv4)}</td>
-            <td>${esc(item.Antivirus)}</td>
-            <td>${esc(item.DefenderRealtime)}</td>
-            <td>${esc(item.LastHotfixId)}</td>
-            <td>${esc(item.LastHotfixDate)}</td>
-            <td>${esc(item.PendingRebootSignals)}</td>
-            <td>${esc(item.InstalledSoftwareCount)}</td>
-            <td>${esc(item.RdpOpen)}</td>
-            <td>${esc(item.WinRMOpen)}</td>
-            <td>${esc(item.Manufacturer)}</td>
-            <td>${esc(item.Model)}</td>
-            <td>${esc(item.SerialNumber)}</td>
-            <td>${esc(item.Error)}</td>
+        <tr class="clickable-row `${selectedClass}`" onclick="openSidePanelByName('`${esc(item.ComputerName).replace(/'/g, '&#39;')}`')">
+            <td>`${esc(item.ComputerName)}`</td>
+            <td><span class="`${statusClass(item.HealthStatus)}`">`${esc(item.HealthStatus)}`</span></td>
+            <td>`${esc(item.HealthIssues)}`</td>
+            <td>`${esc(item.Reachable)}`</td>
+            <td>`${esc(item.CimSession)}`</td>
+            <td>`${esc(item.LoggedOnUser)}`</td>
+            <td>`${esc(item.OS)}`</td>
+            <td>`${esc(item.Version)}`</td>
+            <td>`${esc(item.BuildNumber)}`</td>
+            <td>`${esc(item.Uptime)}`</td>
+            <td>`${esc(item.CPU)}`</td>
+            <td>`${esc(item.RAMGB)}`</td>
+            <td>`${esc(item.DiskC_TotalGB)}`</td>
+            <td>`${esc(item.DiskC_FreeGB)}`</td>
+            <td>`${esc(item.DiskC_FreePercent)}`</td>
+            <td>`${esc(item.IPv4)}`</td>
+            <td>`${esc(item.Antivirus)}`</td>
+            <td>`${esc(item.DefenderRealtime)}`</td>
+            <td>`${esc(item.LastHotfixId)}`</td>
+            <td>`${esc(item.LastHotfixDate)}`</td>
+            <td>`${esc(item.PendingRebootSignals)}`</td>
+            <td>`${esc(item.InstalledSoftwareCount)}`</td>
+            <td>`${esc(item.RdpOpen)}`</td>
+            <td>`${esc(item.WinRMOpen)}`</td>
+            <td>`${esc(item.Manufacturer)}`</td>
+            <td>`${esc(item.Model)}`</td>
+            <td>`${esc(item.SerialNumber)}`</td>
+            <td>`${esc(item.Error)}`</td>
         </tr>
     `}).join('');
 }
@@ -948,24 +979,24 @@ function closeSidePanel() {
 }
 
 function detailCard(title, value, full = false) {
-    return `<div class="detail-card ${full ? 'full' : ''}"><div class="detail-label">${esc(title)}</div><div class="detail-value">${esc(value ?? '')}</div></div>`;
+    return `<div class="detail-card `${full ? 'full' : ''}`"><div class="detail-label">`${esc(title)}`</div><div class="detail-value">`${esc(value ?? '')}`</div></div>`;
 }
 
 function kvRow(label, value) {
-    return `<div class="k">${esc(label)}</div><div class="v">${esc(value ?? '')}</div>`;
+    return `<div class="k">`${esc(label)}`</div><div class="v">`${esc(value ?? '')}`</div>`;
 }
 
 function sectionCard(cssClass, title, subtitle, innerHtml) {
     return `
-        <section class="section-card ${cssClass}">
+        <section class="section-card `${cssClass}`">
             <div class="section-header">
                 <div>
-                    <div class="section-title">${esc(title)}</div>
-                    <div class="section-subtitle">${esc(subtitle)}</div>
+                    <div class="section-title">`${esc(title)}`</div>
+                    <div class="section-subtitle">`${esc(subtitle)}`</div>
                 </div>
             </div>
             <div class="section-content">
-                ${innerHtml}
+                `${innerHtml}`
             </div>
         </section>
     `;
@@ -979,9 +1010,9 @@ function getHealthSectionClass(status) {
 
 function renderSidePanel(device) {
     document.getElementById('panelComputerName').textContent = device.ComputerName || 'Device Details';
-    document.getElementById('panelSubtext').textContent = `${device.OS || 'Unknown OS'} • ${device.IPv4 || 'No IP found'}`;
+    document.getElementById('panelSubtext').textContent = `${device.OS || 'Unknown OS'} • `${device.IPv4 || 'No IP found'}`;
 
-    const healthBadge = `<span class="${statusClass(device.HealthStatus)}">${esc(device.HealthStatus)}</span>`;
+    const healthBadge = `<span class="`${statusClass(device.HealthStatus)}`">`${esc(device.HealthStatus)}`</span>`;
     const healthClass = getHealthSectionClass(device.HealthStatus);
 
     const overviewSection = sectionCard(
@@ -992,12 +1023,12 @@ function renderSidePanel(device) {
             <div class="detail-card full">
                 <div class="detail-label">Device Summary</div>
                 <div class="kv">
-                    ${kvRow('Computer Name', device.ComputerName)}
-                    ${kvRow('Logged On User', device.LoggedOnUser)}
-                    ${kvRow('Reachable', device.Reachable)}
-                    ${kvRow('CIM Session', device.CimSession)}
-                    ${kvRow('Uptime', device.Uptime)}
-                    ${kvRow('Operating System', `${device.OS || ''} ${device.Version || ''}`.trim())}
+                    `${kvRow('Computer Name', device.ComputerName)}`
+                    `${kvRow('Logged On User', device.LoggedOnUser)}`
+                    `${kvRow('Reachable', device.Reachable)}`
+                    `${kvRow('CIM Session', device.CimSession)}`
+                    `${kvRow('Uptime', device.Uptime)}`
+                    `${kvRow('Operating System', (device.OS || '') + ' ' + (device.Version || '').trim())}`
                 </div>
             </div>
         `
@@ -1008,15 +1039,15 @@ function renderSidePanel(device) {
         'Hardware',
         'System identity and physical resources',
         `
-            ${detailCard('Manufacturer', device.Manufacturer)}
-            ${detailCard('Model', device.Model)}
-            ${detailCard('Serial Number', device.SerialNumber)}
-            ${detailCard('Architecture', device.Architecture)}
-            ${detailCard('CPU', device.CPU, true)}
-            ${detailCard('RAM (GB)', device.RAMGB)}
-            ${detailCard('C: Total (GB)', device.DiskC_TotalGB)}
-            ${detailCard('C: Free (GB)', device.DiskC_FreeGB)}
-            ${detailCard('C: Free %', device.DiskC_FreePercent)}
+            `${detailCard('Manufacturer', device.Manufacturer)}`
+            `${detailCard('Model', device.Model)}`
+            `${detailCard('Serial Number', device.SerialNumber)}`
+            `${detailCard('Architecture', device.Architecture)}`
+            `${detailCard('CPU', device.CPU, true)}`
+            `${detailCard('RAM (GB)', device.RAMGB)}`
+            `${detailCard('C: Total (GB)', device.DiskC_TotalGB)}`
+            `${detailCard('C: Free (GB)', device.DiskC_FreeGB)}`
+            `${detailCard('C: Free %', device.DiskC_FreePercent)}`
         `
     );
 
@@ -1025,12 +1056,12 @@ function renderSidePanel(device) {
         'Security',
         'Protection state and exposure checks',
         `
-            ${detailCard('Health State', device.HealthStatus)}
-            ${detailCard('Health Issues', device.HealthIssues, true)}
-            ${detailCard('Antivirus', device.Antivirus, true)}
-            ${detailCard('Defender Realtime', device.DefenderRealtime)}
-            ${detailCard('Installed Software Count', device.InstalledSoftwareCount)}
-            ${detailCard('Collection Error', device.Error || 'None', true)}
+            `${detailCard('Health State', device.HealthStatus)}`
+            `${detailCard('Health Issues', device.HealthIssues, true)}`
+            `${detailCard('Antivirus', device.Antivirus, true)}`
+            `${detailCard('Defender Realtime', device.DefenderRealtime)}`
+            `${detailCard('Installed Software Count', device.InstalledSoftwareCount)}`
+            `${detailCard('Collection Error', device.Error || 'None', true)}`
         `
     );
 
@@ -1039,10 +1070,10 @@ function renderSidePanel(device) {
         'Patching',
         'Update visibility and reboot indicators',
         `
-            ${detailCard('Last Hotfix ID', device.LastHotfixId)}
-            ${detailCard('Last Hotfix Date', device.LastHotfixDate)}
-            ${detailCard('Pending Reboot Signals', device.PendingRebootSignals)}
-            ${detailCard('Build Number', device.BuildNumber)}
+            `${detailCard('Last Hotfix ID', device.LastHotfixId)}`
+            `${detailCard('Last Hotfix Date', device.LastHotfixDate)}`
+            `${detailCard('Pending Reboot Signals', device.PendingRebootSignals)}`
+            `${detailCard('Build Number', device.BuildNumber)}`
         `
     );
 
@@ -1051,34 +1082,34 @@ function renderSidePanel(device) {
         'Connectivity',
         'Network addressing and remote access exposure',
         `
-            ${detailCard('IPv4', device.IPv4, true)}
-            ${detailCard('RDP Open', device.RdpOpen)}
-            ${detailCard('WinRM Open', device.WinRMOpen)}
-            ${detailCard('Last Boot Time', device.LastBoot, true)}
+            `${detailCard('IPv4', device.IPv4, true)}`
+            `${detailCard('RDP Open', device.RdpOpen)}`
+            `${detailCard('WinRM Open', device.WinRMOpen)}`
+            `${detailCard('Last Boot Time', device.LastBoot, true)}`
         `
     );
 
     const content = `
-        <section class="section-card health-overview ${healthClass}">
+        <section class="section-card health-overview `${healthClass}`">
             <div class="section-header">
                 <div>
                     <div class="section-title">Health Overview</div>
                     <div class="section-subtitle">Immediate status and issue summary</div>
                 </div>
-                <div>${healthBadge}</div>
+                <div>`${healthBadge}`</div>
             </div>
             <div class="section-content">
                 <div class="detail-card full">
                     <div class="detail-label">Current Condition</div>
-                    <div class="detail-value">${esc(device.HealthIssues)}</div>
+                    <div class="detail-value">`${esc(device.HealthIssues)}`</div>
                 </div>
             </div>
         </section>
-        ${overviewSection}
-        ${hardwareSection}
-        ${securitySection}
-        ${patchingSection}
-        ${connectivitySection}
+        `${overviewSection}`
+        `${hardwareSection}`
+        `${securitySection}`
+        `${patchingSection}`
+        `${connectivitySection}`
     `;
 
     document.getElementById('panelContent').innerHTML = content;
@@ -1171,14 +1202,14 @@ function downloadExcel() {
         'LastHotfixDate','PendingRebootSignals','InstalledSoftwareCount','RdpOpen','WinRMOpen','Manufacturer','Model','SerialNumber','Error'
     ];
 
-    let tableRows = filteredData.map(row => '<tr>' + headers.map(h => `<td>${esc(row[h])}</td>`).join('') + '</tr>').join('');
+    let tableRows = filteredData.map(row => '<tr>' + headers.map(h => `<td>`${esc(row[h])}`</td>`).join('') + '</tr>').join('');
     let html = `
         <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
         <head><meta charset="UTF-8"></head>
         <body>
             <table border="1">
-                <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
-                ${tableRows}
+                <tr>`${headers.map(h => `<th>`${h}`</th>`).join('')}`</tr>
+                `${tableRows}`
             </table>
         </body>
         </html>`;
@@ -1199,7 +1230,7 @@ if (-not $targets -or $targets.Count -eq 0) {
     throw 'No computer names were supplied.'
 }
 
-$stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+$stamp   = Get-Date -Format 'yyyyMMdd_HHmmss'
 $results = New-Object System.Collections.Generic.List[object]
 
 foreach ($target in $targets) {
@@ -1210,17 +1241,17 @@ foreach ($target in $targets) {
 }
 
 $results = $results | Sort-Object HealthStatus, ComputerName
-$csvPath = Join-Path $OutputDir "inventory_$stamp.csv"
+$csvPath  = Join-Path $OutputDir "inventory_$stamp.csv"
 $jsonPath = Join-Path $OutputDir "inventory_$stamp.json"
 $results | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
 $results | ConvertTo-Json -Depth 6 | Out-File -FilePath $jsonPath -Encoding utf8
 
 $htmlPath = $null
 if ($ExportHtml) {
-    $htmlPath = Join-Path $OutputDir "inventory_$stamp.html"
-    $csvName = [System.IO.Path]::GetFileName($csvPath)
-    $jsonName = [System.IO.Path]::GetFileName($jsonPath)
-    $excelName = "inventory_$stamp.xls"
+    $htmlPath   = Join-Path $OutputDir "inventory_$stamp.html"
+    $csvName    = [System.IO.Path]::GetFileName($csvPath)
+    $jsonName   = [System.IO.Path]::GetFileName($jsonPath)
+    $excelName  = "inventory_$stamp.xls"
 
     $html = ConvertTo-PrettyHtmlReport `
         -Data $results `
