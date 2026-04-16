@@ -617,7 +617,7 @@ function ConvertTo-PrettyHtmlReport {
     </div>
 
     <div class="footer">
-        Exports apply to the currently visible filtered rows. Click any row to open the detail panel. Press Esc to close. Ctrl+F to search.
+        Exports apply to the currently visible filtered rows. Click any row to open the detail panel. Press Esc to close. Ctrl+F to search. Created & Maintained by jlee2834 (https://github.com/jlee2834)
     </div>
 </div>
 
